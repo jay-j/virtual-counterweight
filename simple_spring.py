@@ -18,11 +18,7 @@ theta_label = "Arm Angle, theta (radians)"
 gravity_torque = mass*g * L * np.cos(theta)
 gravity_torque_max = np.max(gravity_torque)
 
-plt.figure(1)
-plt.plot(theta, gravity_torque, label="Uncompensated gravity")
-plt.xlabel(theta_label)
-plt.ylabel("Torque, Nm")
-plt.grid(True)
+##  ##########################################################################
 
 def rotate_z(vector, angle_rad):
     # one vector, many angles
@@ -34,15 +30,20 @@ def rotate_z(vector, angle_rad):
     return result
 
 
+class Spring:
+    def __init__(self, stiffness, length_natural, length_max):
+        self.stiffness = stiffness
+        self.length_natural = length_natural
+        self.length_max = length_max
+        
+
 # use a model where the lever parametrization is along +X only. Can rotate the entire system later if needed
 class VirtualCounterweight:
-    def __init__(self, lever_radius, spring_origin, spring_cable_length, spring_stiffness, spring_length_natural, spring_length_max):
+    def __init__(self, lever_radius, spring_origin, spring_cable_length, spring):
         self.lever = np.array([lever_radius, 0, 0])
         self.spring_origin = spring_origin
-        self.spring_stiffness = spring_stiffness
-        self.spring_length_natural = spring_length_natural
-        self.spring_length_max = spring_length_max
-        self.static_length = spring_cable_length # 0.010
+        self.static_length = spring_cable_length
+        self.spring = spring
     
     def compute_spring_length(self, theta):
         lever = rotate_z(self.lever, theta)
@@ -61,27 +62,37 @@ class VirtualCounterweight:
         spring_dir = spring_vec / np.linalg.norm(spring_vec, axis=1).reshape((-1,1))
 
         # compute spring length
-        spring_length_delta = np.linalg.norm(spring_vec, axis=1).reshape((-1,1)) - self.static_length - self.spring_length_natural
+        spring_length_delta = np.linalg.norm(spring_vec, axis=1).reshape((-1,1)) - self.static_length - self.spring.length_natural
         # print("spring length delta", spring_length_delta)
 
         # compute spring force
-        spring_force = spring_length_delta * self.spring_stiffness * spring_dir
+        spring_force = spring_length_delta * self.spring.stiffness * spring_dir
         # print("spring force:", spring_force)
 
         # compute torque = r cross F
         torque = lever[:,0]*spring_force[:,1] + lever[:,1]*spring_force[:,0]
         return torque
-    
-
 
 
 # TODO choose between different real spring options
 # should unique spring stiffnesses per spring be allowed? 
-spring_stiffness = 450
-spring_qty = 2
-spring_length_natural = 0.100
-spring_length_max = 0.200
+# spring_stiffness = 450
+# spring_length_natural = 0.100
+# spring_length_max = 0.200
 parms_per_spring = 4
+
+
+
+def vc_list_from_parameters(parm, spring, spring_qty):
+    vc_list = []
+    for i in range(spring_qty):
+        offset = parms_per_spring * i
+        vc_list.append(VirtualCounterweight(lever_radius=parm[offset+0],
+            spring_origin=np.array([parm[offset+1], parm[offset+2], 0]),
+            spring_cable_length=parm[offset+3],
+            spring=spring))
+    return vc_list
+
 
 def compute_net_torque(vc_list):
     net_torque = mass*g * L * np.cos(theta)
@@ -90,27 +101,19 @@ def compute_net_torque(vc_list):
     return net_torque
 
 
-def residual(parm):
+def residual(parm, spring, spring_qty):
     # the function to optimize!
     # six parameters, dimensional locations of the spring
     # given a constant spring
-
-    vc_list = []
-    for i in range(spring_qty):
-        offset = parms_per_spring * i
-        vc_list.append(VirtualCounterweight(lever_radius=parm[offset+0],
-            spring_origin=np.array([parm[offset+1], parm[offset+2], 0]),
-            spring_cable_length=parm[offset+3],
-            spring_stiffness=spring_stiffness,
-            spring_length_natural=spring_length_natural,
-            spring_length_max=spring_length_max))
+    vc_list = vc_list_from_parameters(parm, spring, spring_qty)
     tau = compute_net_torque(vc_list)
 
     # use least squares error
     error = np.sum(np.power(tau, 2))
     return error
     
-def constraint_spring_minimum(parm):
+
+def constraint_spring_minimum(parm, spring, spring_qty):
     # inequality type constraint. Valid when return > 0
     # spring delta length must be > 0 (always in tension)
     minimum_margin = 1
@@ -119,16 +122,14 @@ def constraint_spring_minimum(parm):
         vc = VirtualCounterweight(lever_radius=parm[offset+0],
                 spring_origin=np.array([parm[offset+1], parm[offset+2], 0]),
                 spring_cable_length=parm[offset+3],
-                spring_stiffness=spring_stiffness,
-                spring_length_natural=spring_length_natural,
-                spring_length_max=spring_length_max)
+                spring=spring)
         spring_len = vc.compute_spring_length(theta)
-        spring_length_rel = spring_len - vc.spring_length_natural
+        spring_length_rel = spring_len - vc.spring.length_natural
         minimum_margin = np.min([np.min(spring_length_rel), minimum_margin])
     return minimum_margin
 
 
-def constraint_spring_maximum(parm):
+def constraint_spring_maximum(parm, spring, spring_qty):
     # inequality type constraint. Valid when return > 0
     # compare each spring's maximum reached (delta) length to its maximum rated length
     margin = 1
@@ -137,29 +138,34 @@ def constraint_spring_maximum(parm):
         vc = VirtualCounterweight(lever_radius=parm[offset+0],
                 spring_origin=np.array([parm[offset+1], parm[offset+2], 0]),
                 spring_cable_length=parm[offset+3],
-                spring_stiffness=spring_stiffness,
-                spring_length_natural=spring_length_natural,
-                spring_length_max=spring_length_max)
+                spring=spring)
         spring_len = vc.compute_spring_length(theta)
-        spring_length_rel = vc.spring_length_max - spring_len
+        spring_length_rel = vc.spring.length_max - spring_len
         margin = np.min([np.min(spring_length_rel), margin])
     return margin
 
-constraints = ({"type":"ineq", "fun":constraint_spring_minimum},
-                {"type":"ineq", "fun":constraint_spring_maximum})
 
-# parm_guess_unit = [0.025, 0.010, -0.150, 0.020]
-# parm_bounds_unit = []
+def spring_optimize(spring, spring_qty):
+    # Given a spring, find the optimal arrangement for it
+    # parameters: arm_len, spring_x, spring_y, cable_len
+    parm_guess = [0.025, -0.030, -0.150, 0.010,   0.025, 0.050, -0.150, 0.010]
 
-# VC: arm_len, spring_x, spring_y, cable_len
-parm_guess = [0.025, -0.030, -0.150, 0.010,   0.025, 0.050, -0.150, 0.010]
-# parm_bounds = ([0.015, -0.130, -0.270, 0.000,  0.015, -0.130, -0.270, 0.000], [0.070, 0.130, -0.110, 0.300,   0.070, 0.130, -0.110, 0.300])
+    parm_bounds = ((0.015, 0.090), (-0.130, 0.130), (-0.270, -0.110), (0.000, 0.300),
+                   (0.015, 0.090), (-0.130, 0.130), (-0.270, -0.110), (0.000, 0.300))
 
-parm_bounds = ((0.015, 0.090), (-0.130, 0.130), (-0.270, -0.110), (0.000, 0.300),
-               (0.015, 0.090), (-0.130, 0.130), (-0.270, -0.110), (0.000, 0.300))
-soln = optim.minimize(residual, x0=parm_guess, bounds=parm_bounds, constraints=constraints)
-print(soln.x)
+    args = (spring, spring_qty)
 
+    constraints = ({"type":"ineq", "fun":constraint_spring_minimum, "args":args},
+                    {"type":"ineq", "fun":constraint_spring_maximum, "args":args})
+
+    soln = optim.minimize(residual, x0=parm_guess, bounds=parm_bounds, constraints=constraints, args=args)
+    print(soln.x)
+    return soln
+
+# do the solve - TODO factor out?
+spring_qty = 2
+test_spring = Spring(stiffness=450, length_natural=0.100, length_max=0.200)
+soln = spring_optimize(test_spring, spring_qty)
 
 # show the solution
 
@@ -171,19 +177,24 @@ for i in range(spring_qty):
     counterweights.append(VirtualCounterweight(lever_radius=parm[offset+0],
         spring_origin=np.array([parm[offset+1], parm[offset+2], 0]),
         spring_cable_length=parm[offset+3],
-        spring_stiffness=spring_stiffness,
-        spring_length_natural=0.100, # TODO
-        spring_length_max=0.200)) # TODO
+        spring=test_spring))
 net_torque = gravity_torque
 
 
+plt.figure(1)
+plt.plot(theta, gravity_torque, "k", label="Uncompensated gravity")
+plt.xlabel(theta_label)
+plt.ylabel("Torque, Nm")
+plt.grid(True)
+
 i = 0
+colors = ["b", "g"]
 for vc in counterweights:
     tau = vc.compute_torque(theta)
     net_torque += tau
-    plt.plot(theta, -tau, label=f"-spring {i}")
+    plt.plot(theta, -tau, colors[i], label=f"-spring {i}")
     i += 1
-plt.plot(theta, net_torque, label="net after compensation")
+plt.plot(theta, net_torque, "r", label="net after compensation")
 plt.legend()
 
 net_torque_worst = np.max(np.abs(net_torque))
@@ -192,7 +203,7 @@ print(f"  Worst case torque error {net_torque_worst:.2f} Nm is {100*net_torque_w
 plt.figure(2)
 for i in range(spring_qty):
     offset = parms_per_spring * i
-    plt.plot([0, parm[offset + 0], parm[offset + 1]], [0, 0, parm[offset + 2]])
+    plt.plot([0, parm[offset + 0], parm[offset + 1]], [0, 0, parm[offset + 2]], colors[i])
 plt.axis("equal")
 plt.grid(True)
 
