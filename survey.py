@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from dataclasses import make_dataclass
 
-import simple_spring as cw
+import spring_counterweight as cw
 
 print("Loading the spring catalog...")
 catalog = pd.read_csv("springs_english.csv", sep=",")
@@ -36,8 +36,7 @@ all_solutions = pd.DataFrame(np.zeros(2*len(catalog), dtype=solution_datatype))
 for spring_qty in range(1,3):
     print(f"Searching the catalog with spring_qty={spring_qty}...")
 
-    # TODO go back to searching the entire thing
-    for spring_index in range(240, len(catalog)):
+    for spring_index in range(len(catalog)):
         i = spring_index + (spring_qty-1)*len(catalog)
         item = catalog.iloc[spring_index]
     

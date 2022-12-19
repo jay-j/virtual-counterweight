@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
-import simple_spring as cw
+import spring_counterweight as cw
 
 catalog = pd.read_csv("springs_english.csv", sep=",")
 
