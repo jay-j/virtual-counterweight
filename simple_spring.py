@@ -148,6 +148,7 @@ def constraint_spring_maximum(parm, spring, spring_qty):
 def spring_optimize(spring, spring_qty):
     # Given a spring, find the optimal arrangement for it
     # parameters: arm_len, spring_x, spring_y, cable_len
+    # returns a solution object from scipy.optimize.minimize
     parm_guess = [0.025, -0.030, -0.150, 0.010,   0.025, 0.050, -0.150, 0.010]
 
     parm_bounds = ((0.015, 0.090), (-0.130, 0.130), (-0.270, -0.110), (0.000, 0.300),
@@ -159,15 +160,14 @@ def spring_optimize(spring, spring_qty):
                     {"type":"ineq", "fun":constraint_spring_maximum, "args":args})
 
     soln = optim.minimize(residual, x0=parm_guess, bounds=parm_bounds, constraints=constraints, args=args)
-    print(soln.x)
     return soln
 
 
 def show_solution(spring, spring_qty, solution_parameters):
-    # show the solution
+    # For a given solution, plot torque curves and a schematic of it
     parm = solution_parameters
 
-    vc_list = vc_list_from_parameters(parm, test_spring, spring_qty)
+    vc_list = vc_list_from_parameters(parm, spring, spring_qty)
     net_torque = compute_net_torque(vc_list)
 
     # plot the torque curves
