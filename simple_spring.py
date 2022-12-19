@@ -162,49 +162,47 @@ def spring_optimize(spring, spring_qty):
     print(soln.x)
     return soln
 
-# do the solve - TODO factor out?
-spring_qty = 2
-test_spring = Spring(stiffness=450, length_natural=0.100, length_max=0.200)
-soln = spring_optimize(test_spring, spring_qty)
 
-# show the solution
+def show_solution(spring, spring_qty, solution_parameters):
+    # show the solution
+    parm = solution_parameters
 
-parm = soln.x
+    vc_list = vc_list_from_parameters(parm, test_spring, spring_qty)
+    net_torque = compute_net_torque(vc_list)
 
-counterweights = []
-for i in range(spring_qty):
-    offset = parms_per_spring * i
-    counterweights.append(VirtualCounterweight(lever_radius=parm[offset+0],
-        spring_origin=np.array([parm[offset+1], parm[offset+2], 0]),
-        spring_cable_length=parm[offset+3],
-        spring=test_spring))
-net_torque = gravity_torque
+    # plot the torque curves
+    plt.figure(1)
+    plt.plot(theta, gravity_torque, "k", label="Uncompensated gravity")
+    plt.xlabel(theta_label)
+    plt.ylabel("Torque, Nm")
+    plt.grid(True)
+
+    colors = ["b", "g"]
+    for i, vc in enumerate(vc_list):
+        tau = vc.compute_torque(theta)
+        plt.plot(theta, -tau, colors[i], label=f"-spring {i}")
+    plt.plot(theta, net_torque, "r", label="net after compensation")
+    plt.legend()
+
+    # performance stat
+    net_torque_worst = np.max(np.abs(net_torque))
+    print(f"  Worst case torque error {net_torque_worst:.2f} Nm is {100*net_torque_worst/gravity_torque_max:.0f}% of the original max")
+
+    # draw the schematic at theta=0
+    plt.figure(2)
+    for i in range(spring_qty):
+        offset = parms_per_spring * i
+        plt.plot([0, parm[offset + 0], parm[offset + 1]], [0, 0, parm[offset + 2]], colors[i])
+    plt.axis("equal")
+    plt.grid(True)
+
+    plt.show()
 
 
-plt.figure(1)
-plt.plot(theta, gravity_torque, "k", label="Uncompensated gravity")
-plt.xlabel(theta_label)
-plt.ylabel("Torque, Nm")
-plt.grid(True)
+if __name__ == "__main__":
+    spring_qty = 2
+    test_spring = Spring(stiffness=450, length_natural=0.100, length_max=0.200)
+    soln = spring_optimize(test_spring, spring_qty)
 
-i = 0
-colors = ["b", "g"]
-for vc in counterweights:
-    tau = vc.compute_torque(theta)
-    net_torque += tau
-    plt.plot(theta, -tau, colors[i], label=f"-spring {i}")
-    i += 1
-plt.plot(theta, net_torque, "r", label="net after compensation")
-plt.legend()
+    show_solution(test_spring, spring_qty, soln.x)
 
-net_torque_worst = np.max(np.abs(net_torque))
-print(f"  Worst case torque error {net_torque_worst:.2f} Nm is {100*net_torque_worst/gravity_torque_max:.0f}% of the original max")
-
-plt.figure(2)
-for i in range(spring_qty):
-    offset = parms_per_spring * i
-    plt.plot([0, parm[offset + 0], parm[offset + 1]], [0, 0, parm[offset + 2]], colors[i])
-plt.axis("equal")
-plt.grid(True)
-
-plt.show()
