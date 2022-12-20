@@ -12,3 +12,7 @@ Open `solutions.csv` as a spreadsheet to explore and filter the option space. A 
 To see more about a solution of interest, use `check_one.py`.
 
 This is quite slow (~4min for a full survey of 1300 springs x 2), I didn't bother to try and make it fast.
+
+# Example Output Plots
+![Example plots for a one-spring solution](example_onespring.png)
+![Example plots for a two-spring solution](example_twospring.png)
