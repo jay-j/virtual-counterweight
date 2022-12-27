@@ -23,7 +23,9 @@ soln = np.array([0.015, 0.024, -0.265, 0.000,
 
 ## Now actually run the calculation
 item = catalog.iloc[index]
-test_spring = cw.Spring(stiffness=item["stiffness"], length_natural=item["length_natural"], length_max=item["length_max"])
+test_spring = cw.Spring(stiffness=item["stiffness"], length_natural=item["length_natural"], length_max=item["length_max"], od=item["od"], pn=item["part_number"])
+print(test_spring)
+
 
 cw.show_solution(test_spring, spring_qty, soln)
 

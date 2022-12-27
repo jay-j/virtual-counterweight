@@ -28,6 +28,9 @@ solution_datatype = np.dtype([
     ("spring_origin_x1", float),
     ("spring_origin_y1", float),
     ("cable_length1", float),
+
+    ("spring_od", float),
+    ("spring_pn", str)
 ])
 all_solutions = pd.DataFrame(np.zeros(2*len(catalog), dtype=solution_datatype))
 
@@ -40,7 +43,7 @@ for spring_qty in range(1,3):
         i = spring_index + (spring_qty-1)*len(catalog)
         item = catalog.iloc[spring_index]
     
-        test_spring = cw.Spring(stiffness=item["stiffness"], length_natural=item["length_natural"], length_max=item["length_max"])
+        test_spring = cw.Spring(stiffness=item["stiffness"], length_natural=item["length_natural"], length_max=item["length_max"], od=item["od"], pn=item["part_number"])
         soln = cw.spring_optimize(test_spring, spring_qty)
     
         if i % 10 == 0:
@@ -72,6 +75,9 @@ for spring_qty in range(1,3):
         
             all_solutions.loc[i, "cable_length0"] = soln.x[3]
             all_solutions.loc[i, "cable_length1"] = soln.x[3 + offset]
+
+            all_solutions.loc[i, "spring_od"] = test_spring.od
+            all_solutions.loc[i, "spring_pn"] = test_spring.pn
 
         
 # remove all spring solutions that did not successfully solve
