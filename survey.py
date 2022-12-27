@@ -43,7 +43,7 @@ for spring_qty in range(1,3):
         i = spring_index + (spring_qty-1)*len(catalog)
         item = catalog.iloc[spring_index]
     
-        test_spring = cw.Spring(stiffness=item["stiffness"], length_natural=item["length_natural"], length_max=item["length_max"], od=item["od"], pn=item["part_number"])
+        test_spring = cw.Spring(stiffness=item["stiffness"], length_natural=item["length_natural"], length_max=item["length_max"], od=item["od"], pn=item["part_number"], force_init=item["load_min"])
         soln = cw.spring_optimize(test_spring, spring_qty)
     
         if i % 10 == 0:

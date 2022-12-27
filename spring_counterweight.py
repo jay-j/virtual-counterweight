@@ -35,12 +35,13 @@ def rotate_z(vector, angle_rad):
 
 
 class Spring:
-    def __init__(self, stiffness, length_natural, length_max, od, pn):
+    def __init__(self, stiffness, length_natural, length_max, od, pn, force_init):
         self.stiffness = stiffness
         self.length_natural = length_natural
         self.length_max = length_max
         self.od = od
         self.pn = pn
+        self.force_init = force_init
         
 
 # use a model where the lever parametrization is along +X only. Can rotate the entire system later if needed
@@ -71,25 +72,20 @@ class VirtualCounterweight:
         # print("spring length delta", spring_length_delta)
 
         # compute spring force
-        spring_force = spring_length_delta * self.spring.stiffness * spring_dir
+        spring_force = (self.spring.force_init + spring_length_delta * self.spring.stiffness) * spring_dir
         # print("spring force:", spring_force)
-        return np.linalg.norm(spring_force, axis=1)
+        return spring_force
             
+    def compute_force_magnitude(self, theta):
+        force = self.compute_force(theta)
+        return np.linalg.norm(force, axis=1)
+    
     def compute_torque(self, theta):
         # compute new endpoint given radius
         lever = rotate_z(self.lever, theta)
 
-        spring_vec = self.spring_origin - lever
-        
-        # compute spring direction
-        spring_dir = spring_vec / np.linalg.norm(spring_vec, axis=1).reshape((-1,1))
-
-        # compute spring length
-        spring_length_delta = np.linalg.norm(spring_vec, axis=1).reshape((-1,1)) - self.static_length - self.spring.length_natural
-        # print("spring length delta", spring_length_delta)
-
         # compute spring force
-        spring_force = spring_length_delta * self.spring.stiffness * spring_dir
+        spring_force = self.compute_force(theta)
         # print("spring force:", spring_force)
 
         # compute torque = r cross F
@@ -97,14 +93,11 @@ class VirtualCounterweight:
         return torque
 
 
-# TODO choose between different real spring options
 # should unique spring stiffnesses per spring be allowed? 
 # spring_stiffness = 450
 # spring_length_natural = 0.100
 # spring_length_max = 0.200
 parms_per_spring = 4
-
-
 
 def vc_list_from_parameters(parm, spring, spring_qty):
     vc_list = []
@@ -223,7 +216,7 @@ def show_solution(spring, spring_qty, solution_parameters):
     # compute force
     plt.figure(3)
     for i, vc in enumerate(vc_list):
-        force = vc.compute_force(theta)
+        force = vc.compute_force_magnitude(theta)
         plt.plot(theta, force, colors[i], label=f"spring {i}")
     plt.xlabel(theta_label)
     plt.ylabel("Force, N")
@@ -235,7 +228,7 @@ def show_solution(spring, spring_qty, solution_parameters):
 
 if __name__ == "__main__":
     spring_qty = 2
-    test_spring = Spring(stiffness=450, length_natural=0.100, length_max=0.200, od=0.02, pn="5k3")
+    test_spring = Spring(stiffness=450, length_natural=0.100, length_max=0.200, od=0.02, pn="5k3", force_init=20)
     soln = spring_optimize(test_spring, spring_qty)
 
     show_solution(test_spring, spring_qty, soln.x)
