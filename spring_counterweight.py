@@ -6,16 +6,20 @@ import matplotlib.pyplot as plt
 ## DESIGN PARAMETERS #########################################################
 
 g = 9.81 # acceleration of gravity, m/s^2
-mass = 0.30 # kg, mass of the end effector
-L = 0.300   # m, length from pivot to the 
+mass_ee = 0.291 + 0.5 * 0.0724 # kg, mass of the end effector + half cone
+L_ee = 0.409   # m, length from pivot to the 
+mass_beams = 0.467 # kg
 
 # angle of the main arm, radians
 # measured with positive DOWN, straight horizontal zero
-theta = np.linspace(-np.radians(70), np.radians(70), 32)
+theta = np.linspace(-np.radians(53.6), np.radians(43.4), 32)
 theta_label = "Arm Angle, theta (radians)"
 
+def gravity_torque_(theta):
+    return g*(mass_ee*L_ee + mass_beams*L_ee*0.5) * np.cos(theta)
+
 # uncompensated torque to support the arm, Nm
-gravity_torque = mass*g * L * np.cos(theta)
+gravity_torque = gravity_torque_(theta)
 gravity_torque_max = np.max(gravity_torque)
 
 ##  ##########################################################################
@@ -114,23 +118,12 @@ def vc_list_from_parameters(parm, spring, spring_qty):
 
 
 def compute_net_torque(vc_list):
-    net_torque = mass*g * L * np.cos(theta)
+    net_torque = gravity_torque_(theta)
     for vc in vc_list:
         net_torque += vc.compute_torque(theta)
     return net_torque
 
 
-def residual(parm, spring, spring_qty):
-    # the function to optimize!
-    # six parameters, dimensional locations of the spring
-    # given a constant spring
-    vc_list = vc_list_from_parameters(parm, spring, spring_qty)
-    tau = compute_net_torque(vc_list)
-
-    # use least squares error
-    error = np.sum(np.power(tau, 2))
-    return error
-    
 
 def constraint_spring_minimum(parm, spring, spring_qty):
     # inequality type constraint. Valid when return > 0
@@ -163,11 +156,22 @@ def constraint_spring_maximum(parm, spring, spring_qty):
         margin = np.min([np.min(spring_length_rel), margin])
     return margin
 
+def residual(parm, spring, spring_qty):
+    # the function to optimize!
+    # six parameters, dimensional locations of the spring
+    # given a constant spring
+    vc_list = vc_list_from_parameters(parm, spring, spring_qty)
+    tau = compute_net_torque(vc_list)
+
+    # use least squares error
+    error = np.sum(np.power(tau, 2))
+    return error
+    
 
 def spring_optimize(spring, spring_qty):
     # Given a spring, find the optimal arrangement for it
-    # parameters: arm_len, spring_x, spring_y, cable_len
     # returns a solution object from scipy.optimize.minimize
+    # parameters: arm_len, spring_x, spring_y, cable_len
     parm_guess = [0.025, -0.030, -0.150, 0.010,   0.025, 0.050, -0.150, 0.010]
 
     parm_bounds = ((0.015, 0.090), (-0.130, 0.130), (-0.270, -0.110), (0.000, 0.300),
